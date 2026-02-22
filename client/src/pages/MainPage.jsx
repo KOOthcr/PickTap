@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, School, CheckSquare, LogIn } from 'lucide-react';
+import { useModal } from '../contexts/ModalContext';
 
 const MainPage = () => {
+    const showModal = useModal();
     const [voteType, setVoteType] = useState('class'); // 'class' or 'school'
     const [createForm, setCreateForm] = useState({
         type: 'class',
@@ -18,20 +20,14 @@ const MainPage = () => {
         setVoteType(type); // Sync overall theme
     };
 
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!createForm.name || !createForm.count) {
-            alert('정보가 부족합니다'); // User requested "00정보가 부족합니다" -> I'll use a simple alert for now or a custom UI?
-            // User said: "00정보가 부족합니다 문구가 나오게 해줘"
-            // "00" might mean the specific missing field, but "정보가 하나라도 없으면" implies a generic message or checking each.
-            // Let's assume generic "정보가 부족합니다" first.
-            // Wait, "00정보가 부족합니다" might mean "투표 이름 정보가 부족합니다" or "투표 인원 정보가 부족합니다".
-            // Let's implement specific messages.
             if (!createForm.name) {
-                alert('투표 이름 정보가 부족합니다');
+                await showModal.alert('투표 이름 정보가 부족합니다', '입력 오류');
                 return;
             }
             if (!createForm.count) {
-                alert('투표 인원 정보가 부족합니다');
+                await showModal.alert('투표 인원 정보가 부족합니다', '입력 오류');
                 return;
             }
             return;
@@ -39,9 +35,9 @@ const MainPage = () => {
         navigate(`/create/${createForm.type}`, { state: createForm });
     };
 
-    const handleJoin = () => {
+    const handleJoin = async () => {
         if (!joinCode || joinCode.length < 4) {
-            alert('올바른 참여 코드를 입력해주세요.');
+            await showModal.alert('올바른 참여 코드를 입력해주세요.', '참여 실패');
             return;
         }
         navigate(`/vote/${joinCode.toUpperCase()}`);

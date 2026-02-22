@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
+import { useModal } from '../contexts/ModalContext';
 import { CheckCircle, Lock, AlertCircle, Play, Check, RotateCcw } from 'lucide-react';
 
 const VotePage = () => {
     const { roomId } = useParams();
     const navigate = useNavigate();
     const socket = useSocket();
+    const showModal = useModal();
 
     // Steps: 'login' -> 'voting' -> 'completed' -> 'already_voted'
     const [step, setStep] = useState('login');
@@ -49,7 +51,7 @@ const VotePage = () => {
                     publicKey: response.publicKey
                 });
             } else {
-                alert('존재하지 않는 투표방입니다.');
+                showModal.alert('존재하지 않는 투표방입니다.');
                 navigate('/');
             }
         });
@@ -146,7 +148,7 @@ const VotePage = () => {
                     localStorage.setItem(`voted_${roomId}`, 'true');
                 }
             } else {
-                alert('투표 제출 실패: ' + response.message);
+                showModal.alert('투표 제출 실패: ' + response.message);
                 setShowConfirmModal(false);
             }
         });
@@ -162,7 +164,7 @@ const VotePage = () => {
                 return removed.map((c, i) => ({ ...c, rank: i + 1 }));
             } else {
                 if (prev.length >= maxChoices) {
-                    alert(`${maxChoices}명까지만 선택할 수 있습니다.`);
+                    showModal.alert(`${maxChoices}명까지만 선택할 수 있습니다.`);
                     return prev;
                 }
                 const newRank = prev.length + 1;

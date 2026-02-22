@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
-import { Plus, Trash2, Upload, User, Settings, Play, Users, FileSpreadsheet, Download, Check } from 'lucide-react';
+import { useModal } from '../contexts/ModalContext';
+import { Plus, Trash2, Upload, User, Settings, Play, Users, FileSpreadsheet, Download, Check, AlertCircle } from 'lucide-react';
 import readXlsxFile from 'read-excel-file';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
@@ -11,6 +12,7 @@ const CreateSchoolVote = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const socket = useSocket();
+    const showModal = useModal();
     // Hardcode type to 'school'
     const type = 'school';
     const { name, count } = location.state || {}; // Basic info from Main Page
@@ -18,7 +20,7 @@ const CreateSchoolVote = () => {
     // Redirect if no data
     useEffect(() => {
         if (!name || !count) {
-            alert('잘못된 접근입니다.');
+            showModal.alert('잘못된 접근입니다.');
             navigate('/');
         }
     }, [name, count, navigate]);
@@ -61,7 +63,7 @@ const CreateSchoolVote = () => {
 
     const removeCandidate = (id) => {
         if (candidates.length <= 1) {
-            alert('최소 1명의 후보가 필요합니다.');
+            showModal.alert('최소 1명의 후보가 필요합니다.');
             return;
         }
         setCandidates(candidates.filter(c => c.id !== id));
@@ -118,11 +120,11 @@ const CreateSchoolVote = () => {
     };
 
     // 숫자/영문 코드 방식 전환 핸들러 - 기존 코드 전체 재생성
-    const handleNumericToggle = (newValue) => {
+    const handleNumericToggle = async (newValue) => {
         const msg = newValue
             ? '숫자로만 코드부여로 변경합니다. 기존에 생성된 모든 코드를 새로 만들겠습니까?'
             : '학년별 영문+숫자 조합으로 변경합니다. 기존에 생성된 모든 코드를 새로 만들겠습니까?';
-        if (!window.confirm(msg)) return;
+        if (!await showModal.confirm(msg)) return;
 
         setOnlyNumericCodes(newValue);
 
@@ -165,8 +167,8 @@ const CreateSchoolVote = () => {
         });
     };
 
-    const handleDeleteAll = () => {
-        if (window.confirm('정말 삭제하시겠습니까?')) {
+    const handleDeleteAll = async () => {
+        if (await showModal.confirm('정말 삭제하시겠습니까?')) {
             if (activeGrade === 'all') {
                 setVotersByGrade({ 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] });
             } else {
@@ -180,11 +182,11 @@ const CreateSchoolVote = () => {
     const handleAddVoterAll = () => {
         const { grade, class: classNum, studentId, name } = newVoter;
         if (!grade || !name) {
-            alert('학년과 이름은 필수입니다.');
+            showModal.alert('학년과 이름은 필수입니다.');
             return;
         }
         if (grade < 1 || grade > 6) {
-            alert('학년은 1~6 사이여야 합니다.');
+            showModal.alert('학년은 1~6 사이여야 합니다.');
             return;
         }
 
@@ -265,7 +267,7 @@ const CreateSchoolVote = () => {
                 });
 
                 setVotersByGrade(newVotersByGrade);
-                alert(`전체 명단에 ${addedCount}명을 추가했습니다.`);
+                showModal.alert(`전체 명단에 ${addedCount}명을 추가했습니다.`);
 
             } else {
                 // Specific Grade
@@ -301,12 +303,12 @@ const CreateSchoolVote = () => {
                     ...votersByGrade,
                     [activeGrade]: newGradeVoters
                 });
-                alert(`${activeGrade}학년 명단에 ${addedCount}명을 추가했습니다.`);
+                showModal.alert(`${activeGrade}학년 명단에 ${addedCount}명을 추가했습니다.`);
             }
 
         } catch (error) {
             console.error('Excel Parsing Error:', error);
-            alert('엑셀 파일을 읽는 중 오류가 발생했습니다.');
+            showModal.alert('엑셀 파일을 읽는 중 오류가 발생했습니다.');
         }
 
         // Reset input
@@ -317,7 +319,7 @@ const CreateSchoolVote = () => {
 
     const handleDownloadTemplate = async () => {
         if (activeGrade !== 'all' && !classCounts[activeGrade]) {
-            alert('학급 수를 입력해주세요.');
+            showModal.alert('학급 수를 입력해주세요.');
             return;
         }
         const workbook = new ExcelJS.Workbook();
@@ -372,7 +374,7 @@ const CreateSchoolVote = () => {
         }
 
         if (allVoters.length === 0) {
-            alert('등록된 유권자가 없습니다.');
+            showModal.alert('등록된 유권자가 없습니다.');
             return;
         }
 
@@ -574,7 +576,7 @@ const CreateSchoolVote = () => {
     const handleCreateRoom = () => {
         // Validation
         if (candidates.some(c => !c.name.trim())) {
-            alert('모든 후보자의 이름을 입력해주세요.');
+            showModal.alert('모든 후보자의 이름을 입력해주세요.');
             return;
         }
 
@@ -585,18 +587,18 @@ const CreateSchoolVote = () => {
         });
 
         if (allVoters.length === 0) {
-            alert('최소 1명 이상의 유권자를 등록해주세요.');
+            showModal.alert('최소 1명 이상의 유권자를 등록해주세요.');
             return;
         }
 
         if (allVoters.some(v => !v.name.trim())) {
-            alert('이름이 비어있는 유권자가 있습니다. 확인해주세요.');
+            showModal.alert('이름이 비어있는 유권자가 있습니다. 확인해주세요.');
             return;
         }
 
         // Socket connection check
         if (!socket || !socket.connected) {
-            alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
+            showModal.alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
             return;
         }
 
@@ -676,7 +678,7 @@ const CreateSchoolVote = () => {
             if (response.success) {
                 navigate(`/admin/${newRoomId}`, { state: { roomId: newRoomId, roomConfig: config, generatedVoters } });
             } else {
-                alert('방 생성 실패: ' + response.message);
+                showModal.alert('방 생성 실패: ' + response.message);
             }
         });
     };
@@ -691,9 +693,12 @@ const CreateSchoolVote = () => {
             {showConfirmModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4">
-                        <h2 className="text-xl font-extrabold text-gray-900 mb-3">투표를 시작할까요?</h2>
+                        <div className="flex items-center gap-2 mb-3 text-amber-600">
+                            <AlertCircle className="w-6 h-6" />
+                            <h2 className="text-xl font-extrabold text-gray-900">투표를 시작할까요?</h2>
+                        </div>
                         <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                            선거 본부 입장 시 후보자나 투표 참여자, 설정을 더 이상 수정할 수 없습니다.<br />
+                            선거 본부 입장 시 후보자나 투표 참여자, 설정을 <span className="text-red-500 font-bold underline decoration-red-200 underline-offset-4">더 이상 수정할 수 없습니다.</span><br />
                             모든 준비가 끝났나요?
                         </p>
                         <div className="flex gap-3">

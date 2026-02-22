@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
+import { useModal } from '../contexts/ModalContext';
 import { Home, Download, Trophy, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -245,6 +246,7 @@ const ResultPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const socket = useSocket();
+    const showModal = useModal();
 
     const [resultData, setResultData] = useState(location.state?.resultData || null);
     const [loading, setLoading] = useState(!location.state?.resultData);
@@ -259,7 +261,7 @@ const ResultPage = () => {
         if (resultData || !socket) return;
         socket.emit('getResults', { roomId }, (res) => {
             if (res.success) setResultData(res.resultData);
-            else { alert('결과를 불러오지 못했습니다: ' + res.message); navigate('/'); }
+            else { showModal.alert('결과를 불러오지 못했습니다: ' + res.message); navigate('/'); }
             setLoading(false);
         });
     }, [resultData, socket, roomId, navigate]);
@@ -320,9 +322,11 @@ const ResultPage = () => {
             {/* Header */}
             <header className="bg-white/80 backdrop-blur border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
                 <div className="flex items-center gap-3">
-                    <button onClick={() => navigate('/')} className="text-gray-400 hover:text-gray-700 transition-colors">
-                        <Home className="w-5 h-5" />
-                    </button>
+                    <Link to="/" className="flex items-center gap-2 group transition-all mr-2">
+                        <span className="text-2xl group-hover:scale-110 transition-transform">☝️</span>
+                        <span className="font-extrabold text-xl text-gray-900 tracking-tight">한표꾹</span>
+                    </Link>
+                    <div className="h-6 w-[1px] bg-gray-200 mx-1"></div>
                     <div>
                         <h1 className="text-lg font-extrabold text-gray-900">{config.title}</h1>
                         <p className="text-xs text-gray-400">
@@ -430,6 +434,17 @@ const ResultPage = () => {
                                                             <td className="p-3 text-center font-extrabold text-indigo-700 text-lg">{c.total}표</td>
                                                         </tr>
                                                     ))}
+                                                    {/* 미투표 행 추가 */}
+                                                    <tr className="border-t bg-gray-100">
+                                                        <td className="p-3 text-center">
+                                                            <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-600 text-white text-sm font-bold">-</span>
+                                                        </td>
+                                                        <td className="p-3 font-bold text-gray-600 italic">미투표 참여자</td>
+                                                        {Array.from({ length: tally.maxRank }, (_, r) => (
+                                                            <td key={r} className="p-3 text-center text-gray-300">-</td>
+                                                        ))}
+                                                        <td className="p-3 text-center font-extrabold text-gray-700 text-lg">{totalVoters - votedCount}명</td>
+                                                    </tr>
                                                 </tbody>
                                             </table>
                                         </div>
@@ -461,6 +476,27 @@ const ResultPage = () => {
                                                     </div>
                                                 );
                                             })}
+
+                                            {/* 미투표 그래프 추가 */}
+                                            <div className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-100/50 opacity-90 mt-6 border-dashed">
+                                                <div className="flex items-center gap-4 mb-2">
+                                                    <span className="text-3xl filter grayscale opacity-50">🚫</span>
+                                                    <div className="flex-1">
+                                                        <p className="font-extrabold text-gray-500 text-lg italic">미투표 참여자</p>
+                                                        <p className="text-gray-400 text-xs">총 {totalVoters}명 중 {totalVoters - votedCount}명</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className="text-3xl font-black text-gray-400">{totalVoters - votedCount}</span>
+                                                        <span className="text-sm text-gray-400 ml-1">명</span>
+                                                    </div>
+                                                </div>
+                                                <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                                                    <div
+                                                        className="h-full rounded-full bg-gray-800 transition-all duration-1000 ease-out shadow-sm"
+                                                        style={{ width: `${maxVotes > 0 ? Math.min(100, Math.round(((totalVoters - votedCount) / maxVotes) * 100)) : 0}%` }}
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
                                 </div>

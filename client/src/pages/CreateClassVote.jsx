@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
-import { Plus, Trash2, Upload, User, Settings, Play, Users, FileSpreadsheet } from 'lucide-react';
+import { useModal } from '../contexts/ModalContext';
+import { Plus, Trash2, Upload, User, Settings, Play, Users, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import readXlsxFile from 'read-excel-file';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
@@ -11,6 +12,7 @@ const CreateClassVote = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const socket = useSocket();
+    const showModal = useModal();
     // Hardcode type to 'class'
     const type = 'class';
     const { name, count } = location.state || {}; // Basic info from Main Page
@@ -18,7 +20,7 @@ const CreateClassVote = () => {
     // Redirect if no data
     useEffect(() => {
         if (!name || !count) {
-            alert('잘못된 접근입니다.');
+            showModal.alert('잘못된 접근입니다.');
             navigate('/');
         }
     }, [name, count, navigate]);
@@ -74,7 +76,7 @@ const CreateClassVote = () => {
 
     const removeCandidate = (id) => {
         if (candidates.length <= 1) {
-            alert('최소 1명의 후보가 필요합니다.');
+            showModal.alert('최소 1명의 후보가 필요합니다.');
             return;
         }
         setCandidates(candidates.filter(c => c.id !== id));
@@ -115,12 +117,12 @@ const CreateClassVote = () => {
             })).filter(v => v.name); // Filter out empty names
 
             if (newVoters.length === 0) {
-                alert('유효한 데이터가 없습니다. 양식에 맞게 작성해주세요.');
+                showModal.alert('유효한 데이터가 없습니다. 양식에 맞게 작성해주세요.');
                 return;
             }
 
             setExcelVoters(newVoters);
-            alert(`${newVoters.length}명의 명단을 불러왔습니다.`);
+            showModal.alert(`${newVoters.length}명의 명단을 불러왔습니다.`);
 
             // Reset input
             if (fileInputRef.current) {
@@ -135,7 +137,7 @@ const CreateClassVote = () => {
                 },
                 error: (error) => {
                     console.error('CSV Parsing Error:', error);
-                    alert('CSV 파일을 읽는 중 오류가 발생했습니다.');
+                    showModal.alert('CSV 파일을 읽는 중 오류가 발생했습니다.');
                 }
             });
         } else {
@@ -143,7 +145,7 @@ const CreateClassVote = () => {
                 processRows(rows);
             }).catch((error) => {
                 console.error('Excel Parsing Error:', error);
-                alert('엑셀 파일을 읽는 중 오류가 발생했습니다.');
+                showModal.alert('엑셀 파일을 읽는 중 오류가 발생했습니다.');
             });
         }
     };
@@ -163,7 +165,7 @@ const CreateClassVote = () => {
 
     const handleDownloadCodes = async () => {
         if (options.simpleVote) {
-            alert('간단 투표 모드에서는 개별 코드가 필요하지 않습니다.');
+            showModal.alert('간단 투표 모드에서는 개별 코드가 필요하지 않습니다.');
             return;
         }
 
@@ -185,7 +187,7 @@ const CreateClassVote = () => {
         }
 
         if (currentVoters.length === 0) {
-            alert('유권자 명단이 비어있습니다.');
+            showModal.alert('유권자 명단이 비어있습니다.');
             return;
         }
 
@@ -320,29 +322,29 @@ const CreateClassVote = () => {
     const handleCreateRoom = () => {
         // Validation
         if (candidates.some(c => !c.name.trim())) {
-            alert('모든 후보자의 이름을 입력해주세요.');
+            showModal.alert('모든 후보자의 이름을 입력해주세요.');
             return;
         }
 
         if (voterMode === 'manual') {
             if (manualVoters.some(v => !v.name.trim())) {
-                alert('모든 유권자의 이름을 입력해주세요.');
+                showModal.alert('모든 유권자의 이름을 입력해주세요.');
                 return;
             }
         } else if (voterMode !== 'auto') {
             if (voterMode === 'manual' && manualVoters.length === 0) {
-                alert('유권자 명단을 입력하거나 "자동 생성"을 선택해주세요.');
+                showModal.alert('유권자 명단을 입력하거나 "자동 생성"을 선택해주세요.');
                 return;
             }
             if (voterMode === 'excel' && excelVoters.length === 0) {
-                alert('엑셀 파일을 업로드해주세요.');
+                showModal.alert('엑셀 파일을 업로드해주세요.');
                 return;
             }
         }
 
         // Socket connection check
         if (!socket || !socket.connected) {
-            alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
+            showModal.alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
             return;
         }
 
@@ -356,7 +358,7 @@ const CreateClassVote = () => {
         // Safety timeout: reset after 10 seconds if no response
         const timeout = setTimeout(() => {
             setIsSubmitting(false);
-            alert('서버 응답이 없습니다. 서버가 실행 중인지 확인해주세요.');
+            showModal.alert('서버 응답이 없습니다. 서버가 실행 중인지 확인해주세요.');
         }, 10000);
 
         // 1. Generate Room ID (Invitation Code)
@@ -452,7 +454,7 @@ const CreateClassVote = () => {
                 // Navigate to Admin Page with initial data
                 navigate(`/admin/${newRoomId}`, { state: { roomId: newRoomId, roomConfig: config, generatedVoters } });
             } else {
-                alert('방 생성 실패: ' + response.message);
+                showModal.alert('방 생성 실패: ' + response.message);
             }
         });
     };
@@ -464,9 +466,12 @@ const CreateClassVote = () => {
             {showConfirmModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full mx-4 animate-fadeIn">
-                        <h2 className="text-xl font-extrabold text-gray-900 mb-3">투표를 시작할까요?</h2>
+                        <div className="flex items-center gap-2 mb-3 text-amber-600">
+                            <AlertCircle className="w-6 h-6" />
+                            <h2 className="text-xl font-extrabold text-gray-900">투표를 시작할까요?</h2>
+                        </div>
                         <p className="text-gray-600 text-sm leading-relaxed mb-6">
-                            선거 본부 입장 시 후보자나 투표 참여자, 설정을 더 이상 수정할 수 없습니다.<br />
+                            선거 본부 입장 시 후보자나 투표 참여자, 설정을 <span className="text-red-500 font-bold underline decoration-red-200 underline-offset-4">더 이상 수정할 수 없습니다.</span><br />
                             모든 준비가 끝났나요?
                         </p>
                         <div className="flex gap-3">

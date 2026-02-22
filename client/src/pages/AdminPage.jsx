@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useLocation, useNavigate } from 'react-router-dom';
+import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
+import { useModal } from '../contexts/ModalContext';
 import { Copy, Users, Lock, Play, Square, Home, QrCode, Download, Award, FileSpreadsheet, RotateCcw } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
@@ -11,6 +12,7 @@ const AdminPage = () => {
     const location = useLocation();
     const navigate = useNavigate();
     const socket = useSocket();
+    const showModal = useModal();
 
     const [roomConfig, setRoomConfig] = useState(location.state?.roomConfig || null);
     const [voters, setVoters] = useState(location.state?.generatedVoters || {});
@@ -35,7 +37,7 @@ const AdminPage = () => {
                 setIsStarted(response.isStarted);
                 // setVotes(response.votes); // Implement later when encryption is handled
             } else {
-                alert('방 정보를 불러오지 못했습니다: ' + response.message);
+                showModal.alert('방 정보를 불러오지 못했습니다: ' + response.message);
                 navigate('/');
             }
         });
@@ -99,7 +101,7 @@ const AdminPage = () => {
             if (response.success) {
                 setIsStarted(true);
             } else {
-                alert('무시됨: ' + response.message);
+                showModal.alert('무시됨: ' + response.message);
             }
         });
     };
@@ -124,6 +126,17 @@ const AdminPage = () => {
         setShowCancelModal(true);
     };
 
+    const handleToggleRealtime = async (e) => {
+        const newValue = e.target.checked;
+        const msg = newValue
+            ? "실시간 중계를 활성화하시겠습니까?\n모든 후보자의 득표 상황과 투표 현황이 실시간으로 노출됩니다."
+            : "실시간 중계를 중단하시겠습니까?\n후보자의 득표 상황과 투표 현황이 숨겨지며 '-'로 표시됩니다.";
+
+        if (await showModal.confirm(msg, "실시간 중계 설정")) {
+            setIsRealtime(newValue);
+        }
+    };
+
     const handleConfirmCancel = () => {
         setShowCancelModal(false);
         // 즉시 클라이언트 상태 초기화 (서버 응답 대기 없이)
@@ -139,21 +152,21 @@ const AdminPage = () => {
         socket.emit('resetVoting', { roomId }, () => { });
     };
 
-    const handleDisplayModeChange = (e) => {
+    const handleDisplayModeChange = async (e) => {
         const mode = e.target.value;
         let message = '';
         if (mode === 'public') message = '유권자가 누구에게 투표했는지 모두 공개됩니다. (공개 모드)\n\n주의: 비밀 투표 원칙을 위반할 수 있습니다.\n설정을 변경하시겠습니까?';
         else if (mode === 'check') message = '유권자의 투표 참여 여부(O/X)만 공개됩니다. (체크 모드)\n설정을 변경하시겠습니까?';
         else if (mode === 'secret') message = '유권자의 투표 참여 여부 및 상세 정보를 숨깁니다. (비밀 모드)\n설정을 변경하시겠습니까?';
 
-        if (window.confirm(message)) {
+        if (await showModal.confirm(message)) {
             setVoterDisplayMode(mode);
         }
     };
 
     const handleDownloadCodes = async () => {
         if (!voters || Object.keys(voters).length === 0) {
-            alert('다운로드할 유권자 명단이 없습니다.');
+            showModal.alert('다운로드할 유권자 명단이 없습니다.');
             return;
         }
 
@@ -169,7 +182,7 @@ const AdminPage = () => {
         if (isSchoolVote && activeTab !== 'all') {
             currentVoters = currentVoters.filter(v => v.grade?.toString() === activeTab);
             if (currentVoters.length === 0) {
-                alert('해당 탭에 다운로드할 유권자 명단이 없습니다.');
+                showModal.alert('해당 탭에 다운로드할 유권자 명단이 없습니다.');
                 return;
             }
         }
@@ -367,7 +380,7 @@ const AdminPage = () => {
 
     const copyRoomCode = () => {
         navigator.clipboard.writeText(roomId);
-        alert('참여 코드가 복사되었습니다: ' + roomId);
+        showModal.alert('참여 코드가 복사되었습니다: ' + roomId);
     };
 
     const voteUrl = `${window.location.origin}/vote/${roomId}`;
@@ -521,9 +534,11 @@ const AdminPage = () => {
             {/* Header */}
             <header className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-10 shadow-sm">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/')} className="text-gray-500 hover:text-gray-800">
-                        <Home className="w-6 h-6" />
-                    </button>
+                    <Link to="/" className="flex items-center gap-2 group transition-all mr-2">
+                        <span className="text-2xl group-hover:scale-110 transition-transform">☝️</span>
+                        <span className="font-extrabold text-xl text-gray-900 tracking-tight">한표꾹</span>
+                    </Link>
+                    <div className="h-6 w-[1px] bg-gray-200 mx-1"></div>
                     <div>
                         <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                             {roomConfig.title}
@@ -612,23 +627,7 @@ const AdminPage = () => {
                         </button>
                     </div>
 
-                    {/* Stats Card */}
-                    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-                        <h3 className="text-gray-500 font-bold mb-4 flex items-center gap-2">
-                            <Users className="w-5 h-5" /> 실시간 참여 현황
-                        </h3>
-                        <div className="flex justify-between items-end mb-2">
-                            <span className="text-4xl font-extrabold text-gray-900">{votedCount}</span>
-                            <span className="text-gray-400 font-medium mb-1">/ {totalVoters}명</span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
-                            <div
-                                className="bg-teal-500 h-full rounded-full transition-all duration-500 ease-out"
-                                style={{ width: `${participationRate}% ` }}
-                            ></div>
-                        </div>
-                        <p className="text-right text-teal-600 text-sm font-bold mt-2">{participationRate}% 참여완료</p>
-                    </div>
+
 
                     {/* Options Summary */}
                     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
@@ -729,7 +728,7 @@ const AdminPage = () => {
                                     <input
                                         type="checkbox"
                                         checked={isRealtime}
-                                        onChange={(e) => setIsRealtime(e.target.checked)}
+                                        onChange={handleToggleRealtime}
                                         className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
                                     />
                                     <span className="text-sm font-bold text-gray-700">실시간 중계</span>
@@ -748,17 +747,41 @@ const AdminPage = () => {
                                         <h3 className="font-bold text-lg text-gray-900">{candidate.name}</h3>
                                         <p className="text-xs text-gray-400">기호 {candidate.symbol}</p>
                                     </div>
-                                    {/* Vote Count - Only show if allowed or ended */}
-                                    {(isRealtime || !isStarted) && (
-                                        <div className="text-right">
-                                            <span className="text-2xl font-extrabold text-indigo-600">
-                                                {Object.values(voters).filter(v => v.votedFor === candidate.id).length}
-                                            </span>
-                                            <span className="text-xs text-gray-400 block">표</span>
-                                        </div>
-                                    )}
+                                    <div className="text-right">
+                                        <span className="text-2xl font-extrabold text-indigo-600">
+                                            {isRealtime ? Object.values(voters).filter(v => v.votedFor === candidate.id).length : '-'}
+                                        </span>
+                                        <span className="text-xs text-gray-400 block">표</span>
+                                    </div>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+
+                    {/* 실시간 참여 현황 (Moved below Candidates) */}
+                    <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-gray-500 font-bold flex items-center gap-2 text-lg">
+                                <Users className="w-5 h-5 text-indigo-500" /> 실시간 참여 현황
+                            </h3>
+                            <div className="text-teal-600 font-bold bg-teal-50 px-3 py-1 rounded-full text-sm">
+                                {participationRate}% 참여완료
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-6">
+                            <div className="flex-grow">
+                                <div className="w-full bg-gray-100 rounded-full h-5 overflow-hidden shadow-inner">
+                                    <div
+                                        className="bg-gradient-to-r from-teal-400 to-teal-500 h-full rounded-full transition-all duration-700 ease-out shadow-sm"
+                                        style={{ width: `${participationRate}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                            <div className="shrink-0 flex items-baseline gap-1">
+                                <span className="text-4xl font-extrabold text-gray-900 tabular-nums">{votedCount}</span>
+                                <span className="text-gray-400 font-bold text-lg">/ {totalVoters}명</span>
+                            </div>
                         </div>
                     </div>
 
