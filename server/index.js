@@ -172,30 +172,18 @@ io.on('connection', (socket) => {
         voter.isUsed = true;
         voter.voteTime = new Date().toISOString();
 
-        let parsed = {};
-        try { parsed = JSON.parse(encryptedVote); } catch (e) { console.error('Vote parse error', e); }
-
-        // choices: [{ candidateId, rank }] 또는 단일 candidateId 호환
-        const choices = parsed.choices || (parsed.candidateId ? [{ candidateId: parsed.candidateId, rank: 1 }] : []);
-        const primaryCandidateId = choices.length > 0 ? choices[0].candidateId : null;
-
-        voter.votedFor = primaryCandidateId;
-        voter.choices = choices;
-        voter.opinion = parsed.opinion || '';  // 의견쓰기 저장
-
+        // Server strictly treats encryptedVote as an opaque payload.
         const voteRecord = JSON.stringify({
-            ...parsed,
-            choices,
-            candidateId: primaryCandidateId,
-            opinion: parsed.opinion || '',
             voterCode,
             voterName: voter.name,
             timestamp: voter.voteTime,
+            encryptedData: encryptedVote
         });
         room.votes.push(voteRecord);
 
         io.to(room.hostSocketId).emit('newVote', { encryptedVote: voteRecord });
-        io.to(room.hostSocketId).emit('updateVoterStatus', { voterCode, status: 'voted', candidateId: primaryCandidateId });
+        // Server no longer knows candidateId
+        io.to(room.hostSocketId).emit('updateVoterStatus', { voterCode, status: 'voted' });
 
         callback({ success: true });
     });

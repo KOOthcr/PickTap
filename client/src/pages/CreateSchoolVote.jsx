@@ -7,7 +7,7 @@ import readXlsxFile from 'read-excel-file';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-
+import { generateKeyPair } from '../utils/cryptoUtils';
 const CreateSchoolVote = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -54,6 +54,7 @@ const CreateSchoolVote = () => {
     const fileInputRef = useRef(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [incompleteVoters, setIncompleteVoters] = useState([]);
 
     // --- Candidate Handlers ---
     const addCandidate = () => {
@@ -596,6 +597,10 @@ const CreateSchoolVote = () => {
             return;
         }
 
+        // Check for missing info (class, studentId)
+        const incomplete = allVoters.filter(v => !v.class?.toString().trim() || !v.studentId?.toString().trim());
+        setIncompleteVoters(incomplete);
+
         // Socket connection check
         if (!socket || !socket.connected) {
             showModal.alert('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.');
@@ -607,7 +612,7 @@ const CreateSchoolVote = () => {
     };
 
     // Actual room creation — called from modal '지금 시작'
-    const proceedToCreate = () => {
+    const proceedToCreate = async () => {
         setIsSubmitting(true);
 
         let allVoters = [];
@@ -658,13 +663,25 @@ const CreateSchoolVote = () => {
             };
         });
 
+        // Generate RSA Key Pair for E2EE
+        let localKeys = null;
+        try {
+            localKeys = await generateKeyPair();
+            sessionStorage.setItem(`picktap_pk_${newRoomId}`, localKeys.privateKey);
+        } catch (error) {
+            console.error("Key generation failed", error);
+            showModal.alert('보안(암호화) 키 생성 중 오류가 발생했습니다.');
+            setIsSubmitting(false);
+            return;
+        }
+
         const config = {
             title: name,
             type: type,
             totalVoters: allVoters.length,
             candidates: finalCandidates,
             options: { ...options, onlyNumericCodes },
-            publicKey: null,
+            publicKey: localKeys.publicKey,
             allowRealtime: options.realtimeResults
         };
 
@@ -672,7 +689,7 @@ const CreateSchoolVote = () => {
             roomId: newRoomId,
             config,
             voters: generatedVoters,
-            publicKey: null
+            publicKey: localKeys.publicKey
         }, (response) => {
             setIsSubmitting(false);
             if (response.success) {
@@ -701,6 +718,25 @@ const CreateSchoolVote = () => {
                             선거 본부 입장 시 후보자나 투표 참여자, 설정을 <span className="text-red-500 font-bold underline decoration-red-200 underline-offset-4">더 이상 수정할 수 없습니다.</span><br />
                             모든 준비가 끝났나요?
                         </p>
+
+                        {incompleteVoters.length > 0 && (
+                            <div className="bg-red-50 border border-red-100 rounded-xl p-4 mb-6">
+                                <div className="flex items-center gap-2 text-red-600 mb-2">
+                                    <AlertCircle className="w-5 h-5" />
+                                    <span className="font-bold text-sm">정보 누락 유권자 발견 ({incompleteVoters.length}명)</span>
+                                </div>
+                                <div className="max-h-24 overflow-y-auto mb-3 pr-1 text-xs text-red-500 bg-white/50 rounded p-2">
+                                    {incompleteVoters.map((v, i) => (
+                                        <div key={v.id} className="py-0.5 border-b border-red-50 last:border-0">
+                                            {v.name} ({v.grade}학년 {v.class ? v.class + '반' : '반 없음'} {v.studentId ? v.studentId + '번' : '번호 없음'})
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-red-700 font-extrabold leading-tight">
+                                    ※ 반이나 번호 정보가 없는 유권자가 있습니다. 이대로 진행하시겠습니까?
+                                </p>
+                            </div>
+                        )}
                         <div className="flex gap-3">
                             <button
                                 onClick={() => { setShowConfirmModal(false); proceedToCreate(); }}

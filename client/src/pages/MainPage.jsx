@@ -69,31 +69,30 @@ const MainPage = () => {
                     </div>
 
                     <form className="space-y-6">
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             <label className="text-sm font-semibold text-gray-600 block">투표 유형</label>
-                            <div className="flex gap-4">
-                                <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        name="voteType"
-                                        value="class"
-                                        checked={createForm.type === 'class'}
-                                        onChange={() => handleCreateTypeChange('class')}
-                                        className="w-5 h-5 text-green-500 focus:ring-green-400 border-gray-300"
-                                    />
-                                    <span className="text-gray-700">학급용</span>
-                                </label>
-                                <label className="flex items-center space-x-2 cursor-pointer">
-                                    <input
-                                        type="radio"
-                                        name="voteType"
-                                        value="school"
-                                        checked={createForm.type === 'school'}
-                                        onChange={() => handleCreateTypeChange('school')}
-                                        className="w-5 h-5 text-blue-500 focus:ring-blue-400 border-gray-300"
-                                    />
-                                    <span className="text-gray-700">학교용</span>
-                                </label>
+                            <div className="relative flex p-1.5 bg-gray-100 rounded-2xl w-full">
+                                {/* Sliding Background */}
+                                <div
+                                    className={`absolute top-1.5 bottom-1.5 w-[calc(50%-6px)] bg-white rounded-xl shadow-md transition-all duration-300 ease-out ${createForm.type === 'class' ? 'left-1.5' : 'left-[calc(50%+1px)]'
+                                        }`}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => handleCreateTypeChange('class')}
+                                    className={`relative z-10 flex-1 py-3 text-sm font-bold rounded-xl transition-colors duration-200 ${createForm.type === 'class' ? 'text-green-600' : 'text-gray-500 hover:text-gray-700'
+                                        }`}
+                                >
+                                    학급용
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleCreateTypeChange('school')}
+                                    className={`relative z-10 flex-1 py-3 text-sm font-bold rounded-xl transition-colors duration-200 ${createForm.type === 'school' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+                                        }`}
+                                >
+                                    학교용
+                                </button>
                             </div>
                         </div>
 

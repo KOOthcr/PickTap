@@ -46,7 +46,7 @@ const FeedbackPage = () => {
                             <div className="flex items-center gap-2">
                                 <Github className="w-5 h-5 text-gray-600" />
                                 <span className="text-gray-600">오픈소스 확인:</span>
-                                <a href="#" className="font-medium text-gray-800 hover:text-black hover:underline">
+                                <a href="https://github.com/KOOthcr/PickTap" className="font-medium text-gray-800 hover:text-black hover:underline">
                                     GitHub Repository
                                 </a>
                             </div>

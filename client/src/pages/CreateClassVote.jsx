@@ -7,7 +7,7 @@ import readXlsxFile from 'read-excel-file';
 import Papa from 'papaparse';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-
+import { generateKeyPair } from '../utils/cryptoUtils';
 const CreateClassVote = () => {
     const location = useLocation();
     const navigate = useNavigate();
@@ -353,7 +353,7 @@ const CreateClassVote = () => {
     };
 
     // Actual room creation (called from modal confirm)
-    const proceedToCreate = () => {
+    const proceedToCreate = async () => {
 
         // Safety timeout: reset after 10 seconds if no response
         const timeout = setTimeout(() => {
@@ -430,6 +430,19 @@ const CreateClassVote = () => {
             };
         });
 
+        // 3.5 Generate RSA Key Pair for E2EE
+        let localKeys = null;
+        try {
+            localKeys = await generateKeyPair();
+            // Store private key securely in session storage for the admin
+            sessionStorage.setItem(`picktap_pk_${newRoomId}`, localKeys.privateKey);
+        } catch (error) {
+            console.error("Key generation failed", error);
+            showModal.alert('보안(암호화) 키 생성 중 오류가 발생했습니다.');
+            setIsSubmitting(false);
+            return;
+        }
+
         // 4. Prepare Config
         const config = {
             title: name,
@@ -437,7 +450,7 @@ const CreateClassVote = () => {
             totalVoters: targetCount,
             candidates: finalCandidates,
             options: options,
-            publicKey: null,
+            publicKey: localKeys.publicKey,
             allowRealtime: options.realtimeResults
         };
 
@@ -446,7 +459,7 @@ const CreateClassVote = () => {
             roomId: newRoomId,
             config,
             voters: generatedVoters,
-            publicKey: null
+            publicKey: localKeys.publicKey
         }, (response) => {
             clearTimeout(timeout);
             setIsSubmitting(false);

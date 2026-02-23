@@ -5,6 +5,7 @@ import { useModal } from '../contexts/ModalContext';
 import { Home, Download, Trophy, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { decryptVote } from '../utils/cryptoUtils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Vote Tally Helper
@@ -248,34 +249,114 @@ const ResultPage = () => {
     const socket = useSocket();
     const showModal = useModal();
 
-    const [resultData, setResultData] = useState(location.state?.resultData || null);
+    // Helper to decrypt fetched result records
+    const parseAndDecryptVote = (rawVoteStr) => {
+        try {
+            const record = typeof rawVoteStr === 'string' ? JSON.parse(rawVoteStr) : rawVoteStr;
+            const privateKey = sessionStorage.getItem(`picktap_pk_${roomId}`);
+
+            if (privateKey && record.encryptedData) {
+                try {
+                    const decryptedPayload = decryptVote(record.encryptedData, privateKey);
+                    Object.assign(record, decryptedPayload);
+                } catch (err) {
+                    try { Object.assign(record, JSON.parse(record.encryptedData)); } catch (e) { }
+                }
+            } else if (record.encryptedData) {
+                try { Object.assign(record, JSON.parse(record.encryptedData)); } catch (e) { }
+            }
+
+            // Ensure candidateId is mapped for easy tallying and backward compatibility
+            if (!record.candidateId && record.choices && record.choices.length > 0) {
+                record.candidateId = record.choices[0].candidateId;
+            }
+            return record;
+        } catch (e) {
+            console.error("Failed to parse/decrypt result string", e);
+            return null;
+        }
+    };
+
+    const [resultData, setResultData] = useState(() => {
+        const initial = location.state?.resultData;
+        if (initial && initial.votes) {
+            const decryptedVotes = initial.votes.map(parseAndDecryptVote).filter(Boolean);
+            const enrichedVoters = { ...initial.voters };
+
+            // Map decrypted data back to voters map for Excel describeVote
+            decryptedVotes.forEach(v => {
+                if (enrichedVoters[v.voterCode]) {
+                    enrichedVoters[v.voterCode].votedFor = v.candidateId;
+                    enrichedVoters[v.voterCode].choices = v.choices;
+                    enrichedVoters[v.voterCode].opinion = v.opinion;
+                }
+            });
+
+            return {
+                ...initial,
+                votes: decryptedVotes,
+                voters: enrichedVoters
+            };
+        }
+        return initial || null;
+    });
+
     const [loading, setLoading] = useState(!location.state?.resultData);
 
     // Reveal states
     const [phase, setPhase] = useState('button'); // 'button' | 'countdown' | 'revealed'
     const [countdown, setCountdown] = useState(3);
     const timerRef = useRef(null);
+    const downloadedRef = useRef(false);
 
     // Fetch data if not passed via state
     useEffect(() => {
         if (resultData || !socket) return;
         socket.emit('getResults', { roomId }, (res) => {
-            if (res.success) setResultData(res.resultData);
-            else { showModal.alert('결과를 불러오지 못했습니다: ' + res.message); navigate('/'); }
+            if (res.success) {
+                const decryptedVotes = res.resultData.votes.map(parseAndDecryptVote).filter(Boolean);
+                const enrichedVoters = { ...res.resultData.voters };
+
+                decryptedVotes.forEach(v => {
+                    if (enrichedVoters[v.voterCode]) {
+                        enrichedVoters[v.voterCode].votedFor = v.candidateId;
+                        enrichedVoters[v.voterCode].choices = v.choices;
+                        enrichedVoters[v.voterCode].opinion = v.opinion;
+                    }
+                });
+
+                setResultData({
+                    ...res.resultData,
+                    votes: decryptedVotes,
+                    voters: enrichedVoters
+                });
+            } else {
+                showModal.alert('결과를 불러오지 못했습니다: ' + res.message);
+                navigate('/');
+            }
             setLoading(false);
         });
     }, [resultData, socket, roomId, navigate]);
 
     // Automatic download trigger
     useEffect(() => {
-        if (resultData && location.state?.autoDownload) {
+        if (resultData && location.state?.autoDownload && !downloadedRef.current) {
             const mode = location.state.autoDownload;
-            // Clear the flag from state so it doesn't download again on refreshes
-            navigate(location.pathname, { replace: true, state: { ...location.state, autoDownload: null } });
+            downloadedRef.current = true;
 
             // Trigger download after a small delay to ensure page is ready
             setTimeout(() => {
-                exportExcel(resultData, mode);
+                if (mode === 'both') {
+                    exportExcel(resultData, 'check');
+                    setTimeout(() => {
+                        exportExcel(resultData, 'public');
+                    }, 500); // Small gap between files
+                } else {
+                    exportExcel(resultData, mode);
+                }
+
+                // Clear the flag from state so it doesn't download again on refreshes
+                navigate(location.pathname, { replace: true, state: { ...location.state, autoDownload: null } });
             }, 1000);
         }
     }, [resultData, location.state, navigate, location.pathname]);

@@ -6,6 +6,7 @@ import { Copy, Users, Lock, Play, Square, Home, QrCode, Download, Award, FileSpr
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { QRCodeCanvas } from 'qrcode.react';
+import { decryptVote } from '../utils/cryptoUtils';
 
 const AdminPage = () => {
     const { roomId } = useParams();
@@ -26,6 +27,35 @@ const AdminPage = () => {
     const [voterDisplayMode, setVoterDisplayMode] = useState('check'); // 'public', 'check', 'secret'
     const [activeTab, setActiveTab] = useState('all'); // 'all' or specific grade
 
+    // Helper to decrypt incoming vote records
+    const parseAndDecryptVote = (rawVoteStr) => {
+        try {
+            const record = typeof rawVoteStr === 'string' ? JSON.parse(rawVoteStr) : rawVoteStr;
+            const privateKey = sessionStorage.getItem(`picktap_pk_${roomId}`);
+
+            if (privateKey && record.encryptedData) {
+                try {
+                    const decryptedPayload = decryptVote(record.encryptedData, privateKey);
+                    Object.assign(record, decryptedPayload);
+                } catch (err) {
+                    try { Object.assign(record, JSON.parse(record.encryptedData)); } catch (e) { }
+                }
+            } else if (record.encryptedData) {
+                try { Object.assign(record, JSON.parse(record.encryptedData)); } catch (e) { }
+            }
+
+            // Ensure candidateId is set for backward compatibility & easy tallying
+            if (!record.candidateId && record.choices && record.choices.length > 0) {
+                record.candidateId = record.choices[0].candidateId;
+            }
+
+            return record;
+        } catch (e) {
+            console.error("Failed to parse/decrypt vote string", e);
+            return null;
+        }
+    };
+
     // Fetch Room Info on Mount (or whenever socket connects)
     useEffect(() => {
         if (!socket) return;
@@ -35,7 +65,21 @@ const AdminPage = () => {
                 setRoomConfig(response.roomConfig);
                 if (response.voters) setVoters(response.voters);
                 setIsStarted(response.isStarted);
-                // setVotes(response.votes); // Implement later when encryption is handled
+                if (response.votes) {
+                    const decryptedVotes = response.votes.map(parseAndDecryptVote).filter(Boolean);
+                    setVotes(decryptedVotes);
+
+                    // Recover votedFor status for UI
+                    setVoters(prev => {
+                        const updated = { ...prev };
+                        decryptedVotes.forEach(v => {
+                            if (updated[v.voterCode]) {
+                                updated[v.voterCode].votedFor = v.candidateId;
+                            }
+                        });
+                        return updated;
+                    });
+                }
             } else {
                 showModal.alert('방 정보를 불러오지 못했습니다: ' + response.message);
                 navigate('/');
@@ -51,15 +95,26 @@ const AdminPage = () => {
         });
 
         socket.on('newVote', ({ encryptedVote }) => {
-            setVotes(prev => [...prev, encryptedVote]);
-            // Also update voter status? Server sends 'updateVoterStatus'?
-            // Actually server emits 'updateVoterStatus' to host.
+            const dec = parseAndDecryptVote(encryptedVote);
+            if (dec) {
+                setVotes(prev => [...prev, dec]);
+                // Update local voter tracking with decrypted selection
+                setVoters(prev => ({
+                    ...prev,
+                    [dec.voterCode]: {
+                        ...prev[dec.voterCode],
+                        isUsed: true,
+                        votedFor: dec.candidateId,
+                        choices: dec.choices
+                    }
+                }));
+            }
         });
 
-        socket.on('updateVoterStatus', ({ voterCode, status, candidateId }) => {
+        socket.on('updateVoterStatus', ({ voterCode, status }) => {
             setVoters(prev => ({
                 ...prev,
-                [voterCode]: { ...prev[voterCode], isUsed: status === 'voted', votedFor: candidateId }
+                [voterCode]: { ...prev[voterCode], isUsed: status === 'voted' }
             }));
         });
 
@@ -116,7 +171,7 @@ const AdminPage = () => {
             if (response.success) {
                 setIsStarted(false);
                 navigate(`/result/${roomId}`, {
-                    state: { resultData: response.resultData, roomId, autoDownload: 'check' }
+                    state: { resultData: response.resultData, roomId, autoDownload: 'both' }
                 });
             }
         });
@@ -509,8 +564,8 @@ const AdminPage = () => {
 
                         <p className="text-gray-500 text-sm leading-relaxed mb-6">
                             종료하면 결과 확인 화면으로 이동합니다.<br />
-                            <span className="text-gray-700 font-semibold">무기명 결과는 자동 저장</span>되며,
-                            기명 데이터(누가 누구에게 투표했는지)는 결과 확인 화면에서 직접 다운로드할 수 있습니다.
+                            <span className="text-gray-700 font-semibold">공개 모드, 체크모드 결과가 자동 저장</span> 됩니다.<br />
+                            결과 확인 화면에서 직접 다운로드 할 수도 있습니다.
                         </p>
 
                         <div className="flex gap-3">
@@ -749,7 +804,14 @@ const AdminPage = () => {
                                     </div>
                                     <div className="text-right">
                                         <span className="text-2xl font-extrabold text-indigo-600">
-                                            {isRealtime ? Object.values(voters).filter(v => v.votedFor === candidate.id).length : '-'}
+                                            {isRealtime
+                                                ? Object.values(voters).reduce((acc, v) => {
+                                                    // Count if this candidate was selected either directly or within choices
+                                                    if (v.votedFor === candidate.id) return acc + 1;
+                                                    if (v.choices && v.choices.some(c => c.candidateId === candidate.id)) return acc + 1;
+                                                    return acc;
+                                                }, 0)
+                                                : '-'}
                                         </span>
                                         <span className="text-xs text-gray-400 block">표</span>
                                     </div>
@@ -885,7 +947,29 @@ const AdminPage = () => {
                                                     {/* Public Mode Detail */}
                                                     {voterDisplayMode === 'public' && voter.isUsed && (
                                                         <span className="text-[10px] font-bold text-indigo-600 truncate">
-                                                            {votedCandidate ? `${votedCandidate.symbol}. ${votedCandidate.name}` : '알 수 없음'}
+                                                            {(() => {
+                                                                const opts = roomConfig?.options || {};
+                                                                const choices = voter.choices || (voter.votedFor ? [{ candidateId: voter.votedFor, rank: 1 }] : []);
+                                                                if (choices.length === 0) return '알 수 없음';
+
+                                                                const getName = (id) => roomConfig.candidates.find(c => c.id === id)?.name || '알 수 없음';
+                                                                const getSymbol = (id) => roomConfig.candidates.find(c => c.id === id)?.symbol || '';
+
+                                                                if (opts.multipleVoting && opts.rankedVoting) {
+                                                                    // Show top 3 ranks
+                                                                    return choices
+                                                                        .sort((a, b) => a.rank - b.rank)
+                                                                        .slice(0, 3)
+                                                                        .map(c => `${c.rank}위:${getName(c.candidateId)}`)
+                                                                        .join(', ');
+                                                                }
+                                                                if (opts.multipleVoting) {
+                                                                    // Show all selections
+                                                                    return choices.map(c => getName(c.candidateId)).join(', ');
+                                                                }
+                                                                const single = roomConfig.candidates.find(c => c.id === voter.votedFor);
+                                                                return single ? `${single.symbol}. ${single.name}` : '알 수 없음';
+                                                            })()}
                                                         </span>
                                                     )}
 

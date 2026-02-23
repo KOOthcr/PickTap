@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
 import { useModal } from '../contexts/ModalContext';
 import { CheckCircle, Lock, AlertCircle, Play, Check, RotateCcw } from 'lucide-react';
-
+import { encryptVote } from '../utils/cryptoUtils';
 const VotePage = () => {
     const { roomId } = useParams();
     const navigate = useNavigate();
@@ -132,12 +132,27 @@ const VotePage = () => {
             ? selectedChoices
             : [{ candidateId: selectedCandidateId, rank: 1 }];
 
-        const encryptedVote = JSON.stringify({
+        const payload = {
             candidateId: choices[0]?.candidateId,
             choices,
             opinion: opinion.trim(),
             timestamp: Date.now()
-        });
+        };
+
+        let encryptedVote;
+        try {
+            if (roomInfo?.publicKey) {
+                encryptedVote = encryptVote(payload, roomInfo.publicKey);
+            } else {
+                // Fallback for older rooms without public key
+                encryptedVote = JSON.stringify(payload);
+            }
+        } catch (error) {
+            console.error("Encryption error:", error);
+            showModal.alert('선거 데이터 암호화 중 오류가 발생했습니다.');
+            setShowConfirmModal(false);
+            return;
+        }
 
         socket.emit('submitVote', { roomId, voterCode, encryptedVote }, (response) => {
             if (response.success) {
