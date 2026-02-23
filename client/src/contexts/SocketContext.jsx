@@ -13,7 +13,7 @@ export const SocketProvider = ({ children }) => {
     useEffect(() => {
         // In development, assume server is on localhost:3000
         // In production, this might need to be dynamic
-        const newSocket = io('http://localhost:3000', {
+        const newSocket = io(import.meta.env.VITE_SERVER_URL || 'http://localhost:3000', {
             transports: ['websocket'],
             reconnection: true,
         });
